@@ -1,0 +1,903 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Multi-Style Storybook Creator</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Comic+Neue:wght@300;400;700&family=Fredoka+One&family=Caveat:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <style>
+        body {
+            font-family: 'Comic Neue', cursive;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .story-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(20px);
+            border-radius: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+        .loading-spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .character-container {
+            min-height: 300px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px dashed #ddd;
+            border-radius: 16px;
+            background: #f9f9f9;
+        }
+        .story-page {
+            background: white;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 20px 0;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            page-break-inside: avoid;
+        }
+        .story-page img {
+            width: 200px;
+            height: 200px;
+            object-fit: cover;
+            border-radius: 12px;
+            flex-shrink: 0;
+        }
+        .story-text {
+            flex: 1;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: #f0f0f0;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+        .style-card, .theme-card {
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+        .style-card:hover, .theme-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+        }
+        .style-card.selected, .theme-card.selected {
+            border: 2px solid #667eea;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+        .style-card.selected .style-icon, .theme-card.selected .theme-icon {
+            color: white;
+        }
+        .pixar-style { background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); }
+        .cartoon-style { background: linear-gradient(135deg, #fa709a 0%, #fee140 100%); }
+        .watercolor-style { background: linear-gradient(135deg, #a8edea 0%, #fed6e3 100%); }
+        .realistic-style { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .anime-style { background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%); }
+        .storybook-style { background: linear-gradient(135deg, #ffecd2 0%, #fcb69f 100%); }
+        
+        @media print {
+            body {
+                background: white;
+                min-height: auto;
+            }
+            .story-card {
+                background: white;
+                box-shadow: none;
+                border: none;
+            }
+            .story-page {
+                box-shadow: none;
+                border: 1px solid #ddd;
+            }
+        }
+    </style>
+</head>
+<body class="p-4">
+    <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-6xl font-bold text-white mb-4" style="font-family: 'Fredoka One', cursive;">
+                <i class="fas fa-palette text-yellow-300"></i>
+                Multi-Style Storybook Creator
+            </h1>
+            <p class="text-xl text-white opacity-90">Create personalized storybooks in your favorite art style</p>
+        </div>
+
+        <!-- API Key Setup -->
+        <div class="story-card p-6 mb-6">
+            <div class="flex items-center gap-4 mb-4">
+                <i class="fas fa-key text-2xl text-blue-500"></i>
+                <h2 class="text-2xl font-bold text-gray-800">OpenAI API Setup</h2>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div class="md:col-span-2">
+                    <input type="password" id="apiKey" placeholder="Enter your OpenAI API key (sk-...)" 
+                           class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                </div>
+                <button onclick="testConnection()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold transition">
+                    <i class="fas fa-plug mr-2"></i>Test Connection
+                </button>
+            </div>
+            <div id="connectionStatus" class="mt-4 text-sm"></div>
+        </div>
+
+        <!-- Art Style Selection -->
+        <div class="story-card p-6 mb-6">
+            <div class="flex items-center gap-4 mb-6">
+                <i class="fas fa-palette text-2xl text-purple-500"></i>
+                <h2 class="text-2xl font-bold text-gray-800">Choose Your Art Style</h2>
+            </div>
+            
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <div class="style-card pixar-style text-white p-4 rounded-lg selected" onclick="selectArtStyle('pixar')">
+                    <div class="text-center">
+                        <i class="fas fa-cube style-icon text-3xl mb-2"></i>
+                        <h3 class="font-bold text-lg">3D Pixar</h3>
+                        <p class="text-sm opacity-90">Movie-quality 3D animation</p>
+                    </div>
+                </div>
+                <div class="style-card cartoon-style text-white p-4 rounded-lg" onclick="selectArtStyle('cartoon')">
+                    <div class="text-center">
+                        <i class="fas fa-smile style-icon text-3xl mb-2"></i>
+                        <h3 class="font-bold text-lg">2D Cartoon</h3>
+                        <p class="text-sm opacity-90">Classic cartoon style</p>
+                    </div>
+                </div>
+                <div class="style-card watercolor-style text-white p-4 rounded-lg" onclick="selectArtStyle('watercolor')">
+                    <div class="text-center">
+                        <i class="fas fa-paint-brush style-icon text-3xl mb-2"></i>
+                        <h3 class="font-bold text-lg">Watercolor</h3>
+                        <p class="text-sm opacity-90">Soft painted illustrations</p>
+                    </div>
+                </div>
+                <div class="style-card realistic-style text-white p-4 rounded-lg" onclick="selectArtStyle('realistic')">
+                    <div class="text-center">
+                        <i class="fas fa-camera style-icon text-3xl mb-2"></i>
+                        <h3 class="font-bold text-lg">Realistic</h3>
+                        <p class="text-sm opacity-90">Photorealistic artwork</p>
+                    </div>
+                </div>
+                <div class="style-card anime-style text-white p-4 rounded-lg" onclick="selectArtStyle('anime')">
+                    <div class="text-center">
+                        <i class="fas fa-star style-icon text-3xl mb-2"></i>
+                        <h3 class="font-bold text-lg">Anime</h3>
+                        <p class="text-sm opacity-90">Japanese animation style</p>
+                    </div>
+                </div>
+                <div class="style-card storybook-style text-white p-4 rounded-lg" onclick="selectArtStyle('storybook')">
+                    <div class="text-center">
+                        <i class="fas fa-book-open style-icon text-3xl mb-2"></i>
+                        <h3 class="font-bold text-lg">Storybook</h3>
+                        <p class="text-sm opacity-90">Classic children's book art</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Character Creation -->
+        <div class="story-card p-6 mb-6">
+            <div class="flex items-center gap-4 mb-6">
+                <i class="fas fa-user-plus text-2xl text-green-500"></i>
+                <h2 class="text-2xl font-bold text-gray-800">Create Your Character</h2>
+            </div>
+            
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Character Input -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-lg font-semibold text-gray-700 mb-3">Character Creation Method</label>
+                        <div class="flex gap-4">
+                            <button onclick="setCreationMethod('photo')" id="photoBtn" class="flex-1 bg-blue-500 text-white px-4 py-3 rounded-lg font-semibold">
+                                <i class="fas fa-camera mr-2"></i>Upload Photo
+                            </button>
+                            <button onclick="setCreationMethod('text')" id="textBtn" class="flex-1 bg-gray-300 text-gray-700 px-4 py-3 rounded-lg font-semibold">
+                                <i class="fas fa-pencil-alt mr-2"></i>Text Description
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Photo Upload -->
+                    <div id="photoUpload" class="space-y-4">
+                        <label class="block text-lg font-semibold text-gray-700">Upload Photo</label>
+                        <div class="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                            <input type="file" id="photoInput" accept="image/*" class="hidden" onchange="handlePhotoUpload(event)">
+                            <button onclick="document.getElementById('photoInput').click()" class="bg-blue-500 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-600 transition">
+                                <i class="fas fa-upload mr-2"></i>Choose Photo
+                            </button>
+                            <p class="text-gray-500 mt-2">Upload a clear photo for character creation</p>
+                        </div>
+                        <div id="photoPreview" class="hidden text-center">
+                            <img id="previewImg" class="max-w-xs mx-auto rounded-lg">
+                            <p class="text-green-600 mt-2"><i class="fas fa-check"></i> Photo uploaded successfully</p>
+                        </div>
+                    </div>
+
+                    <!-- Text Description -->
+                    <div id="textDescription" class="space-y-4 hidden">
+                        <label class="block text-lg font-semibold text-gray-700">Character Description</label>
+                        <textarea id="characterDesc" rows="4" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  placeholder="Describe your character: A 7-year-old girl with curly brown hair, bright green eyes, wearing a red dress with white polka dots..."></textarea>
+                    </div>
+
+                    <!-- Character Details -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-lg font-semibold text-gray-700 mb-2">Character Name</label>
+                            <input type="text" id="characterName" placeholder="Enter character name" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                        </div>
+                        <div>
+                            <label class="block text-lg font-semibold text-gray-700 mb-2">Age</label>
+                            <select id="characterAge" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="4">4 years old</option>
+                                <option value="5">5 years old</option>
+                                <option value="6">6 years old</option>
+                                <option value="7">7 years old</option>
+                                <option value="8">8 years old</option>
+                                <option value="9">9 years old</option>
+                                <option value="10">10 years old</option>
+                                <option value="11">11 years old</option>
+                                <option value="12">12 years old</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <button onclick="generateCharacter()" class="w-full bg-gradient-to-r from-purple-500 to-pink-500 text-white px-6 py-4 rounded-lg font-bold text-lg hover:from-purple-600 hover:to-pink-600 transition">
+                        <i class="fas fa-magic mr-2"></i>Generate Character
+                    </button>
+                </div>
+
+                <!-- Character Result -->
+                <div class="space-y-4">
+                    <div class="character-container" id="characterResult">
+                        <div class="text-center text-gray-500">
+                            <i class="fas fa-user-circle text-6xl mb-4"></i>
+                            <p>Your character will appear here</p>
+                        </div>
+                    </div>
+                    
+                    <div id="characterInfo" class="hidden bg-gray-50 p-4 rounded-lg">
+                        <h3 class="font-bold text-lg mb-2">Character Details</h3>
+                        <div id="characterDetails"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Story Creation -->
+        <div class="story-card p-6 mb-6" id="storySection" style="display: none;">
+            <div class="flex items-center gap-4 mb-6">
+                <i class="fas fa-book text-2xl text-orange-500"></i>
+                <h2 class="text-2xl font-bold text-gray-800">Create Your Story</h2>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <!-- Story Settings -->
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-lg font-semibold text-gray-700 mb-3">Story Theme</label>
+                        <div class="grid grid-cols-2 gap-4">
+                            <div class="theme-card bg-blue-100 p-4 rounded-lg border" onclick="selectTheme('adventure')">
+                                <div class="text-center">
+                                    <i class="fas fa-mountain theme-icon text-blue-500 text-2xl mb-2"></i>
+                                    <h4 class="font-bold">Adventure</h4>
+                                    <p class="text-sm text-gray-600">Epic quests and discoveries</p>
+                                </div>
+                            </div>
+                            <div class="theme-card bg-purple-100 p-4 rounded-lg border" onclick="selectTheme('magic')">
+                                <div class="text-center">
+                                    <i class="fas fa-wand-magic-sparkles theme-icon text-purple-500 text-2xl mb-2"></i>
+                                    <h4 class="font-bold">Magic</h4>
+                                    <p class="text-sm text-gray-600">Wizards and enchanted worlds</p>
+                                </div>
+                            </div>
+                            <div class="theme-card bg-green-100 p-4 rounded-lg border" onclick="selectTheme('friendship')">
+                                <div class="text-center">
+                                    <i class="fas fa-heart theme-icon text-green-500 text-2xl mb-2"></i>
+                                    <h4 class="font-bold">Friendship</h4>
+                                    <p class="text-sm text-gray-600">Making friends and teamwork</p>
+                                </div>
+                            </div>
+                            <div class="theme-card bg-yellow-100 p-4 rounded-lg border" onclick="selectTheme('learning')">
+                                <div class="text-center">
+                                    <i class="fas fa-graduation-cap theme-icon text-yellow-500 text-2xl mb-2"></i>
+                                    <h4 class="font-bold">Learning</h4>
+                                    <p class="text-sm text-gray-600">Educational adventures</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <label class="block text-lg font-semibold text-gray-700 mb-2">Story Length</label>
+                            <select id="storyLength" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="4">4 pages (Short)</option>
+                                <option value="6">6 pages (Medium)</option>
+                                <option value="8">8 pages (Long)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-lg font-semibold text-gray-700 mb-2">Reading Level</label>
+                            <select id="readingLevel" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                                <option value="beginner">Beginner (Ages 3-5)</option>
+                                <option value="intermediate">Intermediate (Ages 6-8)</option>
+                                <option value="advanced">Advanced (Ages 9-12)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-lg font-semibold text-gray-700 mb-2">Custom Story Idea (Optional)</label>
+                        <textarea id="customStoryIdea" rows="3" class="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                  placeholder="Enter a specific story idea or let us create one based on your theme..."></textarea>
+                    </div>
+
+                    <button onclick="generateStory()" class="w-full bg-gradient-to-r from-green-500 to-blue-500 text-white px-6 py-4 rounded-lg font-bold text-lg hover:from-green-600 hover:to-blue-600 transition">
+                        <i class="fas fa-magic mr-2"></i>Generate Story
+                    </button>
+                </div>
+
+                <!-- Story Progress -->
+                <div class="space-y-4">
+                    <div class="bg-gray-50 p-6 rounded-lg">
+                        <h3 class="font-bold text-lg mb-4">Story Generation Progress</h3>
+                        <div id="storyProgress">
+                            <div class="progress-bar mb-4">
+                                <div class="progress-fill" id="progressFill"></div>
+                            </div>
+                            <div id="progressText" class="text-sm text-gray-600">Ready to generate your story...</div>
+                        </div>
+                    </div>
+                    
+                    <div id="storyPreview" class="hidden bg-white p-6 rounded-lg border">
+                        <h3 class="font-bold text-lg mb-4">Story Preview</h3>
+                        <div id="storyTitle" class="text-xl font-bold mb-2"></div>
+                        <div id="storyDescription" class="text-gray-600"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Generated Story -->
+        <div class="story-card p-6 mb-6" id="storyResult" style="display: none;">
+            <div class="flex items-center gap-4 mb-6">
+                <i class="fas fa-book-open text-2xl text-red-500"></i>
+                <h2 class="text-2xl font-bold text-gray-800">Your Complete Storybook</h2>
+            </div>
+            
+            <div id="storyPages" class="space-y-4">
+                <!-- Story pages will be generated here -->
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="text-center text-white opacity-75 mt-8">
+            <p>&copy; 2024 Multi-Style Storybook Creator. Create magical stories in any art style.</p>
+        </div>
+    </div>
+
+    <script>
+        // Global variables
+        let openaiClient = null;
+        let generatedCharacter = null;
+        let characterImage = null;
+        let selectedTheme = 'adventure';
+        let selectedArtStyle = 'pixar';
+        let creationMethod = 'photo';
+        let currentResponseId = null;
+        let storyPages = [];
+
+        // Art style definitions
+        const artStyles = {
+            pixar: {
+                name: "3D Pixar",
+                prompt: "Professional Pixar Animation Studios 3D rendered character with subsurface scattering, volumetric lighting, and movie-quality rendering",
+                technical: "RenderMan quality, global illumination, physically-based materials, cinematic lighting"
+            },
+            cartoon: {
+                name: "2D Cartoon",
+                prompt: "Classic 2D cartoon character with bold outlines, vibrant colors, and traditional animation style",
+                technical: "Hand-drawn animation style, cel shading, bold lines, flat colors with simple shading"
+            },
+            watercolor: {
+                name: "Watercolor",
+                prompt: "Soft watercolor painting style with gentle brush strokes, flowing colors, and artistic paper texture",
+                technical: "Watercolor techniques, wet-on-wet blending, soft edges, transparent layers, artistic paper texture"
+            },
+            realistic: {
+                name: "Realistic",
+                prompt: "Photorealistic portrait with natural lighting, detailed textures, and lifelike appearance",
+                technical: "Photorealistic rendering, natural lighting, detailed skin textures, realistic proportions"
+            },
+            anime: {
+                name: "Anime",
+                prompt: "Japanese anime character style with large expressive eyes, detailed hair, and manga-inspired features",
+                technical: "Anime art style, cel shading, large eyes, stylized proportions, manga influence"
+            },
+            storybook: {
+                name: "Storybook",
+                prompt: "Classic children's book illustration style with warm colors, gentle shading, and timeless appeal",
+                technical: "Traditional book illustration, warm color palette, gentle shading, timeless children's book style"
+            }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log('Multi-Style Storybook Creator initialized');
+            selectTheme('adventure');
+        });
+
+        // API Key and Connection Testing
+        function testConnection() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const statusDiv = document.getElementById('connectionStatus');
+            
+            if (!apiKey) {
+                statusDiv.innerHTML = '<div class="text-red-600"><i class="fas fa-times"></i> Please enter your OpenAI API key</div>';
+                return;
+            }
+
+            if (!apiKey.startsWith('sk-')) {
+                statusDiv.innerHTML = '<div class="text-red-600"><i class="fas fa-times"></i> Invalid API key format. Should start with "sk-"</div>';
+                return;
+            }
+
+            statusDiv.innerHTML = '<div class="text-blue-600"><i class="fas fa-spinner fa-spin"></i> Testing connection...</div>';
+
+            fetch('https://api.openai.com/v1/models', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    statusDiv.innerHTML = '<div class="text-green-600"><i class="fas fa-check"></i> Connection successful! Ready to create characters.</div>';
+                    window.openaiApiKey = apiKey;
+                } else if (response.status === 401) {
+                    statusDiv.innerHTML = '<div class="text-red-600"><i class="fas fa-times"></i> Invalid API key. Please check your key.</div>';
+                } else if (response.status === 403) {
+                    statusDiv.innerHTML = '<div class="text-red-600"><i class="fas fa-times"></i> Access denied. Please ensure your account has image generation access.</div>';
+                } else {
+                    statusDiv.innerHTML = '<div class="text-red-600"><i class="fas fa-times"></i> Connection failed. Please check your API key and try again.</div>';
+                }
+            })
+            .catch(error => {
+                statusDiv.innerHTML = '<div class="text-red-600"><i class="fas fa-times"></i> Connection error. Please check your internet connection.</div>';
+            });
+        }
+
+        // Art Style Selection
+        function selectArtStyle(style) {
+            selectedArtStyle = style;
+            
+            // Update visual selection
+            document.querySelectorAll('.style-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.target.closest('.style-card').classList.add('selected');
+            
+            console.log('Selected art style:', artStyles[style].name);
+        }
+
+        // Character Creation Methods
+        function setCreationMethod(method) {
+            creationMethod = method;
+            const photoBtn = document.getElementById('photoBtn');
+            const textBtn = document.getElementById('textBtn');
+            const photoUpload = document.getElementById('photoUpload');
+            const textDescription = document.getElementById('textDescription');
+
+            if (method === 'photo') {
+                photoBtn.className = 'flex-1 bg-blue-500 text-white px-4 py-3 rounded-lg font-semibold';
+                textBtn.className = 'flex-1 bg-gray-300 text-gray-700 px-4 py-3 rounded-lg font-semibold';
+                photoUpload.classList.remove('hidden');
+                textDescription.classList.add('hidden');
+            } else {
+                photoBtn.className = 'flex-1 bg-gray-300 text-gray-700 px-4 py-3 rounded-lg font-semibold';
+                textBtn.className = 'flex-1 bg-blue-500 text-white px-4 py-3 rounded-lg font-semibold';
+                photoUpload.classList.add('hidden');
+                textDescription.classList.remove('hidden');
+            }
+        }
+
+        function handlePhotoUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const preview = document.getElementById('photoPreview');
+                    const previewImg = document.getElementById('previewImg');
+                    previewImg.src = e.target.result;
+                    preview.classList.remove('hidden');
+                    
+                    characterImage = e.target.result.split(',')[1];
+                };
+                reader.readAsDataURL(file);
+            }
+        }
+
+        // Enhanced Character Generation with Art Styles
+        async function generateCharacter() {
+            const apiKey = window.openaiApiKey;
+            if (!apiKey) {
+                alert('Please enter and test your OpenAI API key first.');
+                return;
+            }
+
+            const characterName = document.getElementById('characterName').value.trim();
+            const characterAge = document.getElementById('characterAge').value;
+            const resultDiv = document.getElementById('characterResult');
+
+            if (!characterName) {
+                alert('Please enter a character name.');
+                return;
+            }
+
+            resultDiv.innerHTML = '<div class="text-center"><div class="loading-spinner"></div><p class="text-gray-600">Creating your character in ' + artStyles[selectedArtStyle].name + ' style...</p></div>';
+
+            try {
+                let prompt = '';
+
+                if (creationMethod === 'photo' && characterImage) {
+                    prompt = createPhotoToStylePrompt(characterName, characterAge, selectedArtStyle);
+                } else {
+                    const description = document.getElementById('characterDesc').value.trim();
+                    if (!description) {
+                        alert('Please provide a character description.');
+                        return;
+                    }
+                    prompt = createTextToStylePrompt(characterName, characterAge, description, selectedArtStyle);
+                }
+
+                const response = await fetch('https://api.openai.com/v1/images/generations', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${apiKey}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        model: "dall-e-3",
+                        prompt: prompt,
+                        n: 1,
+                        size: "1024x1024",
+                        quality: "hd"
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const imageUrl = data.data[0].url;
+                
+                displayCharacter(imageUrl, characterName, characterAge);
+                
+                generatedCharacter = {
+                    name: characterName,
+                    age: characterAge,
+                    imageUrl: imageUrl,
+                    style: selectedArtStyle,
+                    prompt: prompt
+                };
+                
+                document.getElementById('storySection').style.display = 'block';
+                document.getElementById('storySection').scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error generating character:', error);
+                resultDiv.innerHTML = `
+                    <div class="text-center text-red-600">
+                        <i class="fas fa-exclamation-triangle text-4xl mb-4"></i>
+                        <p class="font-semibold">Error generating character</p>
+                        <p class="text-sm">${error.message}</p>
+                        <p class="text-xs mt-2">Please check your API key and try again.</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayCharacter(imageUrl, name, age) {
+            const resultDiv = document.getElementById('characterResult');
+            const infoDiv = document.getElementById('characterInfo');
+            const detailsDiv = document.getElementById('characterDetails');
+
+            resultDiv.innerHTML = `
+                <div class="text-center">
+                    <img src="${imageUrl}" alt="${name}" class="max-w-full max-h-80 mx-auto rounded-lg shadow-lg">
+                    <div class="mt-4">
+                        <h3 class="text-2xl font-bold text-gray-800">${name}</h3>
+                        <p class="text-gray-600">${age} years old</p>
+                        <p class="text-sm text-purple-600 font-semibold">${artStyles[selectedArtStyle].name} Style</p>
+                    </div>
+                </div>
+            `;
+
+            detailsDiv.innerHTML = `
+                <div class="grid grid-cols-2 gap-4">
+                    <div><strong>Name:</strong> ${name}</div>
+                    <div><strong>Age:</strong> ${age} years old</div>
+                    <div><strong>Style:</strong> ${artStyles[selectedArtStyle].name}</div>
+                    <div><strong>Quality:</strong> High resolution</div>
+                </div>
+            `;
+
+            infoDiv.classList.remove('hidden');
+        }
+
+        // Style-specific prompts
+        function createPhotoToStylePrompt(name, age, style) {
+            const styleInfo = artStyles[style];
+            return `
+Transform this person into a ${styleInfo.name} character named ${name}, age ${age}.
+
+ART STYLE: ${styleInfo.prompt}
+TECHNICAL SPECS: ${styleInfo.technical}
+
+CHARACTER DETAILS:
+- Name: ${name}
+- Age: ${age} years old
+- Maintain person's core facial features
+- Apply ${styleInfo.name} artistic style consistently
+- High quality, professional artwork
+- Clean, appealing character design
+- Family-friendly and engaging
+
+Create a beautiful ${styleInfo.name} style character that captures the essence of this person.
+            `;
+        }
+
+        function createTextToStylePrompt(name, age, description, style) {
+            const styleInfo = artStyles[style];
+            return `
+Create a ${styleInfo.name} character named ${name}, age ${age}: ${description}
+
+ART STYLE: ${styleInfo.prompt}
+TECHNICAL SPECS: ${styleInfo.technical}
+
+CHARACTER SPECIFICATIONS:
+- Name: ${name}
+- Age: ${age} years old
+- Description: ${description}
+- Apply ${styleInfo.name} artistic style
+- High quality, professional artwork
+- Appealing character design
+- Family-friendly and engaging
+- Consistent with chosen art style
+
+Render in beautiful ${styleInfo.name} style with professional quality.
+            `;
+        }
+
+        // Story Theme Selection
+        function selectTheme(theme) {
+            selectedTheme = theme;
+            
+            document.querySelectorAll('.theme-card').forEach(card => {
+                card.classList.remove('selected');
+            });
+            event.target.closest('.theme-card').classList.add('selected');
+        }
+
+        // Story Generation with Style Consistency
+        async function generateStory() {
+            const apiKey = window.openaiApiKey;
+            if (!apiKey || !generatedCharacter) {
+                alert('Please generate a character first.');
+                return;
+            }
+
+            const storyLength = parseInt(document.getElementById('storyLength').value);
+            const readingLevel = document.getElementById('readingLevel').value;
+            const customIdea = document.getElementById('customStoryIdea').value.trim();
+            
+            const progressDiv = document.getElementById('storyProgress');
+            const progressFill = document.getElementById('progressFill');
+            const progressText = document.getElementById('progressText');
+            const storyResultDiv = document.getElementById('storyResult');
+            const storyPagesDiv = document.getElementById('storyPages');
+
+            progressText.textContent = 'Creating story outline...';
+            progressFill.style.width = '10%';
+
+            try {
+                const storyOutline = await generateStoryOutline(selectedTheme, storyLength, readingLevel, customIdea);
+                
+                progressText.textContent = 'Generating story pages...';
+                progressFill.style.width = '30%';
+
+                storyPages = [];
+                storyPagesDiv.innerHTML = '';
+
+                for (let i = 0; i < storyLength; i++) {
+                    const pageProgress = 30 + (i + 1) * (70 / storyLength);
+                    progressFill.style.width = `${pageProgress}%`;
+                    progressText.textContent = `Generating page ${i + 1} of ${storyLength}...`;
+
+                    const pageData = await generateStoryPage(storyOutline, i, storyLength);
+                    storyPages.push(pageData);
+                    
+                    displayStoryPage(pageData, i + 1);
+                }
+
+                progressText.textContent = 'Story complete!';
+                progressFill.style.width = '100%';
+
+                storyResultDiv.style.display = 'block';
+                storyResultDiv.scrollIntoView({ behavior: 'smooth' });
+
+            } catch (error) {
+                console.error('Error generating story:', error);
+                progressText.textContent = `Error: ${error.message}`;
+                progressFill.style.width = '0%';
+            }
+        }
+
+        async function generateStoryOutline(theme, length, level, customIdea) {
+            const character = generatedCharacter;
+            
+            let prompt = `Create a ${length}-page children's story outline for "${character.name}", a ${character.age}-year-old character.
+
+Theme: ${theme}
+Reading Level: ${level}
+Art Style: ${artStyles[character.style].name}
+${customIdea ? `Custom Idea: ${customIdea}` : ''}
+
+Create an engaging story suitable for the reading level with:
+- Title
+- Brief description
+- ${length} page summaries with scene descriptions
+- Character emotions and actions for each page
+- Moral or lesson learned
+
+Make it age-appropriate and perfect for ${artStyles[character.style].name} style illustrations.`;
+
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${window.openaiApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: "gpt-4",
+                    messages: [{ role: "user", content: prompt }],
+                    max_tokens: 1000
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return data.choices[0].message.content;
+        }
+
+        async function generateStoryPage(storyOutline, pageIndex, totalPages) {
+            const character = generatedCharacter;
+            
+            // Generate page text
+            const textPrompt = `Based on this story outline, write the text for page ${pageIndex + 1} of ${totalPages}:
+
+${storyOutline}
+
+Write engaging text featuring ${character.name}. Make it ${pageIndex === 0 ? 'an exciting opening' : pageIndex === totalPages - 1 ? 'a satisfying conclusion' : 'an engaging middle section'}.`;
+
+            const textResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${window.openaiApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: "gpt-4",
+                    messages: [{ role: "user", content: textPrompt }],
+                    max_tokens: 200
+                })
+            });
+
+            if (!textResponse.ok) {
+                throw new Error(`HTTP error! status: ${textResponse.status}`);
+            }
+
+            const textData = await textResponse.json();
+            const pageText = textData.choices[0].message.content;
+
+            // Generate page illustration with consistent style
+            const styleInfo = artStyles[character.style];
+            const imagePrompt = `
+Create a ${styleInfo.name} style illustration for page ${pageIndex + 1} of a children's storybook.
+
+CHARACTER: ${character.name} (${character.age} years old) - maintain consistent appearance
+SCENE: ${pageText}
+ART STYLE: ${styleInfo.prompt}
+TECHNICAL: ${styleInfo.technical}
+
+REQUIREMENTS:
+- Show ${character.name} in the scene described
+- Maintain consistent character appearance
+- Apply ${styleInfo.name} artistic style
+- Child-friendly and engaging illustration
+- Professional quality artwork
+- Scene should match the story text
+
+Create a beautiful ${styleInfo.name} style illustration that brings this story moment to life.
+            `;
+
+            const imageResponse = await fetch('https://api.openai.com/v1/images/generations', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${window.openaiApiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    model: "dall-e-3",
+                    prompt: imagePrompt,
+                    n: 1,
+                    size: "1024x1024",
+                    quality: "hd"
+                })
+            });
+
+            if (!imageResponse.ok) {
+                throw new Error(`HTTP error! status: ${imageResponse.status}`);
+            }
+
+            const imageData = await imageResponse.json();
+            const imageUrl = imageData.data[0].url;
+
+            return {
+                pageNumber: pageIndex + 1,
+                text: pageText,
+                imageUrl: imageUrl
+            };
+        }
+
+        function displayStoryPage(pageData, pageNumber) {
+            const storyPagesDiv = document.getElementById('storyPages');
+            
+            const pageDiv = document.createElement('div');
+            pageDiv.className = 'story-page';
+            pageDiv.innerHTML = `
+                <img src="${pageData.imageUrl}" alt="Page ${pageNumber}" class="story-page-image">
+                <div class="story-text">
+                    <h3 class="text-xl font-bold mb-3">Page ${pageNumber}</h3>
+                    <p class="leading-relaxed">${pageData.text}</p>
+                </div>
+            `;
+            
+            storyPagesDiv.appendChild(pageDiv);
+        }
+    </script>
+</body>
+</html>
